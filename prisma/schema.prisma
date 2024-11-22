@@ -1,0 +1,440 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// npx prisma migrate dev --name addCollectionFeature
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String               @id @default(uuid())
+  name               String
+  email              String               @unique
+  type               Role                 @default(CUSTOMER)
+  subscribeType      SubscribeType        @default(NONE)
+  status             Boolean
+  bcAddress          String               @unique
+  password           String
+  image              String?
+  phone              String?
+  birthday           DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  organizer          Organizer? // Relation to Organizer model
+  customer           Customer? // Relation to Customer model
+  guest              Guest? // Relation to Guest model
+  ViewedEvent        ViewedEvent[]
+  LoginAttempt       LoginAttempt[]
+  VerificationCode   VerificationCode[]
+  PasswordResetToken PasswordResetToken[]
+  blockchainInfo     BlockchainInfo?
+  Tickets            Tickets[]
+  Subscription       Subscription?
+  Family             Family?              @relation(fields: [familyId], references: [id])
+  familyId           String?
+  Event              Event[]
+  PendingEvent       PendingEvent[]
+
+  @@unique([email, bcAddress])
+}
+
+model Organizer {
+  id            String         @id @default(uuid())
+  user          User           @relation(fields: [userId], references: [id])
+  userId        String         @unique
+  image         String
+  Events        Event[]
+  PendingEvents PendingEvent[]
+  imzaSirkusu   String
+  vergiLevha    String
+  sicilGazete   String?
+  iban          String
+  hesapAdi      String
+
+  tcFotokopi String?
+  AdEvents   AdEvent[]
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  Collection Collection[]
+}
+
+model Customer {
+  id           String        @id @default(uuid())
+  user         User          @relation(fields: [userId], references: [id])
+  userId       String        @unique
+  viewedEvents ViewedEvent[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  Coupon       Coupon[]
+}
+
+model Guest {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Subscription {
+  id        String   @id @default(uuid())
+  price     Float
+  startDate DateTime @default(now())
+  endDate   DateTime
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    String?  @unique
+  familyId  String?  @unique
+  user      User?    @relation(fields: [userId], references: [id])
+  family    Family?  @relation(fields: [familyId], references: [id])
+
+  @@index([userId])
+  @@index([familyId])
+}
+
+model Family {
+  id           String        @id @default(uuid())
+  name         String
+  users        User[]
+  subscription Subscription?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([name])
+}
+
+model BlockchainInfo {
+  id              String  @id @default(uuid())
+  privateKey      String?
+  mnemonic        String?
+  mnemonicIsShown Boolean @default(false)
+  userId          String  @unique
+  user            User    @relation(fields: [userId], references: [id])
+}
+
+model Event {
+  id                String           @id @default(uuid())
+  creatorId         User             @relation(fields: [userId], references: [id])
+  date              DateTime
+  desc              String?
+  highlight         String?
+  numberOfPerson    String           @default("1")
+  eventName         String
+  eventCategory     Category         @relation(fields: [categoryId], references: [id])
+  eventCategoryType CategoryType     @relation(fields: [categoryTypeId], references: [id])
+  image             String
+  location          Location         @relation(fields: [locationId], references: [id])
+  time              String
+  userId            String
+  contractAddress   String
+  categoryId        String
+  categoryTypeId    String
+  locationId        String
+  priceLabel        String
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  ViewedEvent       ViewedEvent[] // Relation to ViewedEvent
+  AdEvent           AdEvent[]
+  TicketCategory    TicketCategory[]
+  Tickets           Tickets[]
+  Organizer         Organizer?       @relation(fields: [organizerId], references: [id])
+  organizerId       String?
+
+  // Events can be part of many collections
+  collections Collection[] @relation("EventCollections")
+
+  // Events can be applicable for coupons in many collections
+  applicableCollections Collection[] @relation("EventApplicableCollections")
+
+  @@index([createdAt])
+  @@index([date])
+}
+
+model Collection {
+  id                 String     @id @default(uuid())
+  name               String
+  Organizer          Organizer? @relation(fields: [organizerId], references: [id])
+  organizerId        String?
+  image              String
+  discountPercentage Int
+  expireAt           DateTime
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  // Many-to-many relation for events that are part of this collection
+  events Event[] @relation("EventCollections")
+
+  // Many-to-many relation for events where this collection's coupons are applicable
+  applicableEvents Event[] @relation("EventApplicableCollections")
+
+  coupons Coupon[]
+
+  @@index([createdAt])
+}
+
+model Coupon {
+  id                 String     @id @default(uuid())
+  code               String     @unique // Unique code for the coupon
+  customerId         String
+  customer           Customer   @relation(fields: [customerId], references: [id])
+  collectionId       String
+  collection         Collection @relation(fields: [collectionId], references: [id])
+  isRedeemed         Boolean    @default(false) // Marks if the coupon has been used
+  discountPercentage Int // Discount percentage for the coupon
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  @@unique([customerId, collectionId]) // Enforce one coupon per collection for each customer
+}
+
+model PendingEvent {
+  id                String           @id @default(uuid())
+  creatorId         User             @relation(fields: [userId], references: [id])
+  date              DateTime
+  desc              String?
+  highlight         String?
+  numberOfPerson    String           @default("1")
+  eventName         String
+  eventCategory     Category         @relation(fields: [categoryId], references: [id])
+  eventCategoryType CategoryType     @relation(fields: [categoryTypeId], references: [id])
+  isActive          Boolean          @default(false)
+  image             String
+  location          Location         @relation(fields: [locationId], references: [id])
+  time              String
+  userId            String
+  categoryId        String
+  categoryTypeId    String
+  locationId        String
+  Organizer         Organizer?       @relation(fields: [organizerId], references: [id])
+  organizerId       String?
+  TicketCategory    TicketCategory[]
+
+  @@unique([eventName, date])
+}
+
+model Tickets {
+  id               String         @id @default(uuid())
+  owner            User           @relation(fields: [userId], references: [id])
+  ticketTypeName   String
+  price            Float
+  eventId          String
+  tokenId          Int
+  ipfsImage        String?
+  ipfsMetadata     String?
+  ticketCategoryId String
+  block            String
+  seat             String
+  isUsed           Boolean        @default(false)
+  sold             Boolean        @default(false)
+  heldUntil        DateTime?
+  userId           String
+  event            Event          @relation(fields: [eventId], references: [id])
+  ticketCategory   TicketCategory @relation(fields: [ticketCategoryId], references: [id])
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([eventId])
+  @@index([ticketCategoryId])
+}
+
+model TicketCategory {
+  id              String        @id @default(uuid())
+  eventId         String?
+  pendingId       String?
+  name            String
+  price           Float
+  quantity        Int
+  blockSeatEntity Json
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  event           Event?        @relation(fields: [eventId], references: [id])
+  pendingEvent    PendingEvent? @relation(fields: [pendingId], references: [id])
+  Tickets         Tickets[]
+
+  @@index([eventId])
+  @@index([createdAt])
+}
+
+model Category {
+  id           String         @id @default(uuid())
+  name         String         @unique
+  image        String
+  CategoryType CategoryType[]
+  Event        Event[]
+  PendingEvent PendingEvent[]
+  // Tickets      Tickets[]
+}
+
+model City {
+  id       String     @id @default(uuid())
+  name     String     @unique
+  image    String
+  Location Location[]
+}
+
+model CategoryType {
+  id           String         @id @default(uuid())
+  name         String         @unique
+  category     Category       @relation(fields: [categoryId], references: [id])
+  categoryId   String
+  image        String?
+  PendingEvent PendingEvent[]
+  Event        Event[]
+  // Tickets      Tickets[]
+}
+
+model Location {
+  id             String         @id @default(uuid())
+  name           String         @unique
+  address        String
+  image          String
+  blockImage     String
+  city           City           @relation(fields: [cityId], references: [id])
+  map            String
+  transportation String
+  Event          Event[]
+  PendingEvent   PendingEvent[]
+  cityId         String
+  SeatingBlock   SeatingBlock[]
+}
+
+model Seat {
+  id             String       @id @default(uuid())
+  seatNumber     Int
+  title          String
+  empty          Boolean
+  row            Int
+  column         Int
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  seatingBlockId String // Optional, as a seat may not always belong to a block
+  seatingBlock   SeatingBlock @relation(fields: [seatingBlockId], references: [id]) // One block can have many seats
+
+  @@unique([seatNumber, seatingBlockId]) // Ensures seatNumber is unique within a block
+}
+
+model SeatingBlock {
+  id           String   @id @default(uuid())
+  numOfRows    String
+  numOfColumns String
+  name         String
+  seats        Seat[]
+  location     Location @relation(fields: [locationId], references: [id])
+  locationId   String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model ViewedEvent {
+  id       String   @id @default(uuid())
+  user     User     @relation(fields: [userId], references: [id])
+  event    Event    @relation(fields: [eventId], references: [id])
+  viewedAt DateTime @default(now())
+  userId   String
+  eventId  String
+
+  // @@unique([userId, eventId])
+  Customer   Customer? @relation(fields: [customerId], references: [id])
+  customerId String?
+}
+
+model Log {
+  id        String   @id @default(uuid())
+  message   String
+  level     LogLevel
+  timestamp DateTime @default(now())
+}
+
+model LoginAttempt {
+  id        String      @id @default(uuid())
+  user      User        @relation(fields: [userId], references: [id])
+  userId    String
+  timestamp DateTime    @default(now())
+  ipAddress String
+  status    LoginStatus
+}
+
+model AdType {
+  id        String    @id @default(uuid())
+  type      String    @unique // e.g., BANNER, VIDEO, etc.
+  price     Decimal
+  imageSize String
+  adEvents  AdEvent[] // Relation to AdEvent model
+}
+
+model AdEvent {
+  id          String     @id @default(uuid())
+  startDate   DateTime
+  endDate     DateTime
+  event       Event      @relation(fields: [eventId], references: [id])
+  eventId     String
+  Organizer   Organizer? @relation(fields: [organizerId], references: [id])
+  image       String
+  organizerId String?
+  status      Boolean
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  adTypeId    String
+  adType      AdType     @relation(fields: [adTypeId], references: [id])
+
+  @@unique([eventId, startDate]) // Ensures that the same event cannot have multiple ads on the same day
+}
+
+// // Enum to define different ad types
+// enum AdType {
+//   HIGHLIGHTED
+//   SUGGESTED
+//   HOT
+//   BANNER
+// }
+
+model VerificationCode {
+  id        String   @id @default(cuid())
+  userId    String
+  code      String
+  expiresAt DateTime
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  token     String
+  expiresAt DateTime
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+enum Role {
+  CUSTOMER
+  ORGANIZER
+  GUEST
+  ADMIN
+}
+
+enum SubscribeType {
+  NONE
+  PERSONAL
+  FAMILY
+}
+
+enum LogLevel {
+  INFO
+  WARNING
+  ERROR
+}
+
+enum LoginStatus {
+  SUCCESS
+  FAILURE
+}
